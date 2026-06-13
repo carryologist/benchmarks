@@ -1,0 +1,22 @@
+{
+  "content": "# Diagnosis\n\n## What the log tells us\n\n1. **Symptom:** The connection pool is exhausted (20/20 active, 0 idle, 47 requests queued), causing 30s timeouts for new requests.\n2. **Smoking gun:** Connection #7 has held an open transaction for **over 2 minutes** (started 03:12:01, still open at 03:14:22).\n3. **Why:** The query on #7 returned **2.8 million rows** in 2 seconds, but the application is iterating over them **row-by-row in Python**, inside the open transaction, with no batching or server-side cursor.\n\n## Root cause chain\n\n```\nUnbounded query (SELECT * with no LIMIT)\n  \u2192 2.8M rows fetched\n    \u2192 slow in-app row-by-row processing\n      \u2192 transaction held open for minutes\n        \u2192 connection never returned to pool\n          \u2192 pool exhaustion under concurrent load\n            \u2192 timeouts cascade across the whole app\n```\n\nThe pool timeout is a **symptom**, not the problem. Increasing pool size would only delay the failure (and worsen memory pressure \u2014 2.8M rows of `SELECT *` is likely hundreds of MB per request).\n\n# Fixes\n\n## 1. Immediate fix: stop holding the connection during processing\n\nUse a **server-side cursor with batching**, and keep the transaction scope tight:\n\n```python\n# Before (the bug)\nconn = pool.get_connection()\ncur = conn.cursor()\ncur.execute(\"SELECT * FROM orders JOIN products ... WHERE status = 'pending'\")\nfor row in cur.fetchall():        # loads 2.8M rows, holds connection\n    slow_process(row)             # connection held the whole time\n\n# After\nBATCH = 5000\nlast_id = 0\nwhile True:\n    with pool.connection() as conn:          # connection returned each batch\n        rows = conn.execute(\n            \"\"\"SELECT o.id, o.product_id, p.name, o.qty   -- only needed columns\n               FROM orders o JOIN products p ON o.product_id = p.id\n               WHERE o.status = 'pending' AND o.id > %s\n               ORDER BY o.id LIMIT %s\"\"\",\n            (last_id, BATCH),\n        ).fetchall()\n    if not rows:\n        break\n    process_batch(rows)                       # work happens with NO connection held\n    last_id = rows[-1][0]\n```\n\nKeyset pagination (`WHERE id > last_id`) is preferred over `OFFSET` at this scale.\n\n## 2. Question whether the data needs to leave the database at all\n\nIf the \"processing\" is something like updating statuses or aggregating, push it into SQL:\n\n```sql\nUPDATE orders SET status = 'processed' WHERE status = 'pending';\n```\n\nOne statement, milliseconds of connection time.\n\n## 3. Defensive guardrails (prevent recurrence)\n\n- **`idle_in_transaction_session_timeout`** (PostgreSQL) or equivalent \u2014 kill transactions idle > e.g. 30s.\n- **Statement timeout** at the DB or driver level.\n- **Pool checkout timeout alerting** \u2014 alert when wait queue > 0, not when it hits 47.\n- **Linting/code review rule:** no `fetchall()` on unbounded queries; no `SELECT *` in application code.\n- **Context managers everywhere** (`with pool.connection():`) so connections can't leak on exceptions \u2014 note that if `slow_process()` raised, that connection might never return at all.\n\n## What *not* to do\n\n- Don't just raise `pool_size` to 50 \u2014 you'd get 50 stuck connections instead of 20, plus more DB memory pressure.\n- Don't just raise the 30s checkout timeout \u2014 requests would hang longer before failing.\n\n**Bottom line:** the root cause is an unbounded query whose results are processed inside a long-lived transaction, starving the pool. Fix the query pattern; tune the pool second.",
+  "reasoning": "",
+  "prompt_tokens": 313,
+  "completion_tokens": 1522,
+  "tokens_per_sec": 63.6,
+  "ttft_ms": 0,
+  "wall_time_s": 23.93,
+  "finish_reason": "end_turn",
+  "rubric": {
+    "pool_exhaustion": true,
+    "long_transaction": false,
+    "large_query": true,
+    "row_by_row": true,
+    "pool_config_fix": true,
+    "query_fix": true,
+    "transaction_fix": true
+  },
+  "auto_score": 8,
+  "max_score": 10,
+  "manual_score": null
+}

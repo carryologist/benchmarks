@@ -1,0 +1,17 @@
+{
+  "content": "Minimal fix: make the auth middleware read the same header that `/login` sends: `x-auth-token`.\n\n### Changed `middleware/auth.js`\n\n```javascript\n// Authentication middleware\nfunction authMiddleware(req, res, next) {\n  const token = req.headers['x-auth-token'];\n\n  if (!token) {\n    return res.status(401).json({ error: 'No token provided' });\n  }\n\n  try {\n    const decoded = Buffer.from(token, 'base64').toString('utf8');\n    const [userId, timestamp] = decoded.split(':');\n\n    if (!userId || !timestamp) {\n      return res.status(401).json({ error: 'Invalid token format' });\n    }\n\n    // Token expires after 1 hour\n    if (Date.now() - parseInt(timestamp) > 3600000) {\n      return res.status(401).json({ error: 'Token expired' });\n    }\n\n    req.userId = parseInt(userId);\n    next();\n  } catch (err) {\n    return res.status(401).json({ error: 'Invalid token' });\n  }\n}\n\nmodule.exports = authMiddleware;\n```\n\n### What changed\n\nOnly this line changed:\n\n```javascript\nconst token = req.headers.authorization;\n```\n\nto:\n\n```javascript\nconst token = req.headers['x-auth-token'];\n```\n\n### Why\n\nThe login route sends the token using this response header:\n\n```javascript\nres.set('x-auth-token', token);\n```\n\nSo protected requests should provide the token back using the same header:\n\n```http\nx-auth-token: <token>\n```\n\nThe middleware was checking `authorization`, so it never found the token and returned `401 No token provided`. This makes both sides use `x-auth-token` consistently.",
+  "reasoning": "",
+  "prompt_tokens": 890,
+  "completion_tokens": 550,
+  "tokens_per_sec": 64.5,
+  "ttft_ms": 0,
+  "wall_time_s": 8.53,
+  "finish_reason": "stop",
+  "scoring": {
+    "found_bug": true,
+    "minimal_fix": true,
+    "no_breakage": true,
+    "explanation_quality": 0,
+    "auto_score": 5
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "content": "[\n  {\n    \"id\": \"7f4b2c9e-8a31-4d6f-9c12-5e3a0b7d91f4\",\n    \"name\": \"Maya Rodriguez\",\n    \"email\": \"maya.rodriguez@example.com\",\n    \"role\": \"admin\",\n    \"created_at\": \"2024-01-15T09:24:37Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true,\n      \"language\": \"en\"\n    }\n  },\n  {\n    \"id\": \"2c8e5a91-6f73-4b0d-8e6a-1a9d4f3c2b80\",\n    \"name\": \"Ethan Brooks\",\n    \"email\": \"ethan.brooks@example.com\",\n    \"role\": \"user\",\n    \"created_at\": \"2024-03-02T14:11:05Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": false,\n      \"language\": \"en\"\n    }\n  },\n  {\n    \"id\": \"d91a7b6c-3e54-42f8-a0b9-7c2d5e8f4a13\",\n    \"name\": \"Sofia Chen\",\n    \"email\": \"sofia.chen@example.com\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2023-11-28T18:42:19Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true,\n      \"language\": \"zh\"\n    }\n  },\n  {\n    \"id\": \"a3f9c2d7-5b81-4e60-9f34-0d6a8c1b2e75\",\n    \"name\": \"Liam Patel\",\n    \"email\": \"liam.patel@example.com\",\n    \"role\": \"user\",\n    \"created_at\": \"2024-05-19T07:36:52Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": true,\n      \"language\": \"hi\"\n    }\n  },\n  {\n    \"id\": \"e6b1d4a8-9c27-4f5e-b3a0-6d8f2c7e1b94\",\n    \"name\": \"Amelia Johnson\",\n    \"email\": \"amelia.johnson@example.com\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2023-09-07T12:08:44Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": false,\n      \"language\": \"fr\"\n    }\n  }\n]",
+  "reasoning": "",
+  "prompt_tokens": 90,
+  "completion_tokens": 623,
+  "tokens_per_sec": 58.8,
+  "ttft_ms": 0,
+  "wall_time_s": 10.59,
+  "finish_reason": "stop",
+  "scoring": {
+    "valid_json": true,
+    "five_records": true,
+    "fields_match": true,
+    "enums_valid": true,
+    "no_extra_text": true
+  },
+  "auto_score": 5,
+  "max_score": 5
+}

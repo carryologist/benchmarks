@@ -1,0 +1,26 @@
+{
+  "task_id": "5.3",
+  "runs": [
+    {
+      "tokens_per_sec": 111.6,
+      "ttft_ms": 1146.5,
+      "completion_tokens": 1897,
+      "wall_time_s": 17.0
+    },
+    {
+      "tokens_per_sec": 112.6,
+      "ttft_ms": 1411.0,
+      "completion_tokens": 1900,
+      "wall_time_s": 16.88
+    },
+    {
+      "tokens_per_sec": 111.5,
+      "ttft_ms": 1176.9,
+      "completion_tokens": 1951,
+      "wall_time_s": 17.5
+    }
+  ],
+  "median_tokens_per_sec": 111.6,
+  "median_ttft_ms": 1176.9,
+  "median_completion_tokens": 1900
+}

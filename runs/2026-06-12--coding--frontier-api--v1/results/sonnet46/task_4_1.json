@@ -1,0 +1,19 @@
+{
+  "content": "[\n  {\n    \"id\": \"a3f8c2d1-4b5e-4f6a-9c7d-8e1f2a3b4c5d\",\n    \"name\": \"Sarah Mitchell\",\n    \"email\": \"sarah.mitchell@example.com\",\n    \"role\": \"admin\",\n    \"created_at\": \"2023-01-15T08:32:11Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true,\n      \"language\": \"en-US\"\n    }\n  },\n  {\n    \"id\": \"b7e9d3c2-5f6a-4e7b-8d1c-9f2a3b4c5d6e\",\n    \"name\": \"Carlos Reyes\",\n    \"email\": \"carlos.reyes@webmail.io\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2023-04-22T14:17:45Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": true,\n      \"language\": \"es-MX\"\n    }\n  },\n  {\n    \"id\": \"c1d2e3f4-6a7b-4c8d-9e0f-1a2b3c4d5e6f\",\n    \"name\": \"Priya Nair\",\n    \"email\": \"priya.nair@techcorp.dev\",\n    \"role\": \"user\",\n    \"created_at\": \"2023-07-09T11:05:30Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": false,\n      \"language\": \"en-IN\"\n    }\n  },\n  {\n    \"id\": \"d4e5f6a7-7b8c-4d9e-0f1a-2b3c4d5e6f7a\",\n    \"name\": \"Jonas Weber\",\n    \"email\": \"j.weber@nutzerkonto.de\",\n    \"role\": \"user\",\n    \"created_at\": \"2023-10-03T09:48:22Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": true,\n      \"language\": \"de-DE\"\n    }\n  },\n  {\n    \"id\": \"e8f9a0b1-8c9d-4e0f-1a2b-3c4d5e6f7a8b\",\n    \"name\": \"Aiko Tanaka\",\n    \"email\": \"aiko.tanaka@mailservice.jp\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2024-02-18T16:24:59Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": false,\n      \"language\": \"ja-JP\"\n    }\n  }\n]",
+  "reasoning": "The user wants 5 realistic test records in JSON format matching the given schema.",
+  "prompt_tokens": 95,
+  "completion_tokens": 743,
+  "tokens_per_sec": 73.1,
+  "ttft_ms": 0,
+  "wall_time_s": 10.17,
+  "finish_reason": "end_turn",
+  "scoring": {
+    "valid_json": true,
+    "five_records": true,
+    "fields_match": true,
+    "enums_valid": true,
+    "no_extra_text": true
+  },
+  "auto_score": 5,
+  "max_score": 5
+}

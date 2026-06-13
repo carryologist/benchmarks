@@ -1,0 +1,17 @@
+{
+  "content": "## The Bug\n\nThe login endpoint and the auth middleware disagree on **which header carries the token**:\n\n- **Login** (`server.js`): `res.set('x-auth-token', token)`\n- **Middleware** (`auth.js`): `const token = req.headers.authorization;`\n\nSince they reference different header names, any client following the server's convention (`x-auth-token`) will be rejected with `\"No token provided\"` even with a valid token.\n\n## The Fix (1 line)\n\nChange the middleware to read the same header the app uses everywhere else \u2014 `x-auth-token`:\n\n**middleware/auth.js:**\n```javascript\nfunction authMiddleware(req, res, next) {\n  const token = req.headers['x-auth-token'];   // \u2190 changed from req.headers.authorization\n\n  if (!token) {\n    return res.status(401).json({ error: 'No token provided' });\n  }\n  // ... rest unchanged\n}\n```\n\n## Why I Chose This Side\n\nI changed the **middleware** rather than the login endpoint because the login endpoint establishes `x-auth-token` as the app's convention in **two** ways:\n\n1. It sets the response header `res.set('x-auth-token', token)`.\n2. (Conceptually, this is the name a client is told to use.)\n\nChanging the middleware aligns it with the existing convention with a single edit. Editing the login side would require touching the `res.set(...)` line and would also be inconsistent with the header name the endpoint advertises.\n\n> **Note:** The standard `Authorization` header normally expects a scheme prefix (e.g. `Bearer <token>`). Since this app uses a raw base64 token, the custom `x-auth-token` header is actually the cleaner convention here \u2014 another reason to standardize on it.\n\n## Important Client-Side Caveat\n\nThis fix makes the server **internally consistent**, but be aware of how the token must flow:\n\n- The login response sets `x-auth-token` as a *response* header and also returns `token` in the JSON body.\n- The client must take that token and send it back as a **request** header `x-auth-token` on calls to `/items`.\n\nSetting a response header on `/login` does **not** automatically attach it to subsequent requests \u2014 the client is responsible for that. The most reliable approach is for the client to read `token` from the response body and include it in the `x-auth-token` request header.",
+  "reasoning": "",
+  "prompt_tokens": 1328,
+  "completion_tokens": 1302,
+  "tokens_per_sec": 72.5,
+  "ttft_ms": 0,
+  "wall_time_s": 17.96,
+  "finish_reason": "end_turn",
+  "scoring": {
+    "found_bug": true,
+    "minimal_fix": true,
+    "no_breakage": true,
+    "explanation_quality": 0,
+    "auto_score": 5
+  }
+}

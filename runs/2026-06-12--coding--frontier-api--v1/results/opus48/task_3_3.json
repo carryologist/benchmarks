@@ -1,0 +1,19 @@
+{
+  "content": "# Solving with Bayes' Theorem\n\n## Setting Up the Problem\n\n**Given information:**\n- Server A: P(A) = 0.40, error rate P(E|A) = 0.01\n- Server B: P(B) = 0.35, error rate P(E|B) = 0.02\n- Server C: P(C) = 0.25, error rate P(E|C) = 0.03\n\n**Goal:** Find P(C|E) \u2014 the probability the error came from Server C, given that an error occurred.\n\n## Bayes' Theorem\n\n$$P(C|E) = \\frac{P(E|C) \\cdot P(C)}{P(E)}$$\n\n## Step 1: Calculate Each Server's Contribution to Errors\n\n**Server A:** \n$$P(E|A) \\cdot P(A) = 0.01 \\times 0.40 = 0.0040$$\n\n**Server B:** \n$$P(E|B) \\cdot P(B) = 0.02 \\times 0.35 = 0.0070$$\n\n**Server C:** \n$$P(E|C) \\cdot P(C) = 0.03 \\times 0.25 = 0.0075$$\n\n## Step 2: Calculate Total Probability of an Error P(E)\n\nUsing the **Law of Total Probability:**\n\n$$P(E) = 0.0040 + 0.0070 + 0.0075 = 0.0185$$\n\n## Step 3: Apply Bayes' Theorem\n\n$$P(C|E) = \\frac{0.0075}{0.0185} = 0.4054$$\n\n## Answer\n\n$$\\boxed{P(C|E) \\approx 0.405 \\text{ or } 40.5\\%}$$\n\n## Interpretation\n\nEven though Server C handles only **25%** of traffic, it accounts for about **40.5%** of all errors. This makes sense because Server C has the highest error rate (3%), so an observed error is disproportionately likely to have originated there.\n\n**Full comparison of all servers:**\n\n| Server | P(Server\\|Error) |\n|--------|------------------|\n| A | 0.0040 / 0.0185 = **21.6%** |\n| B | 0.0070 / 0.0185 = **37.8%** |\n| C | 0.0075 / 0.0185 = **40.5%** |\n| **Total** | **100%** \u2713 |",
+  "reasoning": "",
+  "prompt_tokens": 115,
+  "completion_tokens": 748,
+  "tokens_per_sec": 94.9,
+  "ttft_ms": 0,
+  "wall_time_s": 7.88,
+  "finish_reason": "end_turn",
+  "rubric": {
+    "correct_answer": true,
+    "old_wrong_answer": false,
+    "uses_bayes": true,
+    "shows_work": true
+  },
+  "auto_score": 5,
+  "max_score": 5,
+  "manual_score": null
+}

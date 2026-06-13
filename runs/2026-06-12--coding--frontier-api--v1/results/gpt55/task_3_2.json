@@ -1,0 +1,20 @@
+{
+  "content": "",
+  "reasoning": "",
+  "prompt_tokens": 87,
+  "completion_tokens": 4096,
+  "tokens_per_sec": 48.1,
+  "ttft_ms": 0,
+  "wall_time_s": 85.17,
+  "finish_reason": "length",
+  "rubric": {
+    "crdt_accurate": false,
+    "ot_accurate": false,
+    "recommendation": false,
+    "architecture": false,
+    "edge_cases": false
+  },
+  "auto_score": 0,
+  "max_score": 10,
+  "manual_score": null
+}

@@ -1,0 +1,38 @@
+id: 2026-06-12--coding--frontier-api--v1
+title: "Frontier Bakeoff: Claude Fable 5, Opus 4.8, Sonnet 4.6, GPT-5.5"
+date: "2026-06-12"
+suite: suites/coding-app-maintenance/v1
+harness: harnesses/llm-api
+environment: cloud-api
+tags:
+  - frontier
+  - anthropic
+  - openai
+  - cloud
+subjects:
+  - key: fable5
+    model: claude-fable-5
+    provider: anthropic
+    notes: "Suspended by US government export control directive ~3hrs after this run completed"
+  - key: opus48
+    model: claude-opus-4-8
+    provider: anthropic
+  - key: sonnet46
+    model: claude-sonnet-4-6
+    provider: anthropic
+  - key: gpt55
+    model: gpt-5.5
+    provider: openai
+    notes: "temperature=1.0 only; hit 4096 token limit on task 3.2"
+rankings:
+  - model: opus48
+    weighted: 91.9
+  - model: fable5
+    weighted: 89.3
+  - model: sonnet46
+    weighted: 84.5
+  - model: gpt55
+    weighted: 80.0
+links:
+  blog: "https://vibescoder.dev/posts/frontier-bakeoff-we-benchmarked-fable-5-hours-before-the-shutdown"
+  changes: "CHANGES.md"

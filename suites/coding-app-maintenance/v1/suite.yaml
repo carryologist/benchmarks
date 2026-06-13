@@ -1,0 +1,67 @@
+name: Coding & Reasoning App Maintenance
+version: 1
+description: >-
+  10 quality tasks (3 coding, 2 debug/review, 3 reasoning, 2 tool-use)
+  plus 3 speed tasks. Derived from homelab bakeoff Rounds 1-5.
+tasks:
+  coding:
+    - id: "1.1"
+      name: Todo CLI (Node.js)
+      type: functional
+      max_score: 100
+    - id: "1.2"
+      name: URL Shortener API (FastAPI)
+      type: functional
+      max_score: 100
+    - id: "1.3"
+      name: TypeScript Config Parser
+      type: functional
+      max_score: 100
+  debug_review:
+    - id: "2.1"
+      name: Express Auth Bug
+      type: code-review
+    - id: "2.2"
+      name: Flask Pagination
+      type: feature-detection
+      max_score: 5
+  reasoning:
+    - id: "3.1"
+      name: Database Performance Debug
+      type: rubric
+      max_score: 10
+    - id: "3.2"
+      name: Architecture Analysis (Collaborative Editor)
+      type: rubric
+      max_score: 10
+    - id: "3.3"
+      name: Bayes Theorem
+      type: rubric
+      max_score: 5
+  tool_use:
+    - id: "4.1"
+      name: Structured JSON Output
+      type: rubric
+      max_score: 5
+    - id: "4.2"
+      name: Multi-step Tool Chain
+      type: rubric
+      max_score: 5
+  speed:
+    - id: "5.1"
+      name: Short generation
+    - id: "5.2"
+      name: Medium generation
+    - id: "5.3"
+      name: Long generation
+weights:
+  coding: 0.40
+  reasoning: 0.20
+  tool_use: 0.20
+  speed: 0.20
+scoring:
+  composite: "(features / max_features * 60) + (functional / max_functional * 40)"
+  speed: "normalized to fastest model = 100"
+notes:
+  - "Tasks 2.1 and 2.2 run but are not factored into the weighted total."
+  - "Task 1.2 functional tests require a running server; scored on features only."

@@ -1,0 +1,19 @@
+{
+  "content": "# Bayes' Theorem: Finding P(Server C | Error)\n\n## Setting Up the Problem\n\n**Given information:**\n\n| Server | Traffic Share P(Server) | Error Rate P(Error \\| Server) |\n|--------|------------------------|-------------------------------|\n| A | 0.40 | 0.01 |\n| B | 0.35 | 0.02 |\n| C | 0.25 | 0.03 |\n\n## Step 1: Find Total Probability of an Error\n\nUsing the Law of Total Probability:\n\n$$P(\\text{Error}) = P(A) \\cdot P(E|A) + P(B) \\cdot P(E|B) + P(C) \\cdot P(E|C)$$\n\nCalculate each term:\n- Server A: (0.40)(0.01) = **0.0040**\n- Server B: (0.35)(0.02) = **0.0070**\n- Server C: (0.25)(0.03) = **0.0075**\n\n$$P(\\text{Error}) = 0.0040 + 0.0070 + 0.0075 = 0.0185$$\n\n## Step 2: Apply Bayes' Theorem\n\n$$P(C \\mid \\text{Error}) = \\frac{P(C) \\cdot P(\\text{Error} \\mid C)}{P(\\text{Error})}$$\n\n$$P(C \\mid \\text{Error}) = \\frac{(0.25)(0.03)}{0.0185} = \\frac{0.0075}{0.0185}$$\n\n$$\\boxed{P(C \\mid \\text{Error}) = \\frac{15}{37} \\approx 0.4054 \\approx 40.5\\%}$$\n\n## Interpretation\n\nEven though Server C handles only **25%** of traffic, it's responsible for about **40.5%** of errors \u2014 its higher error rate (3%) makes it the most likely culprit.\n\n**Sanity check** \u2014 all three posteriors should sum to 1:\n- P(A | Error) = 0.0040/0.0185 \u2248 21.6%\n- P(B | Error) = 0.0070/0.0185 \u2248 37.8%\n- P(C | Error) = 0.0075/0.0185 \u2248 40.5%\n- Total: \u2248 100% \u2713",
+  "reasoning": "",
+  "prompt_tokens": 115,
+  "completion_tokens": 721,
+  "tokens_per_sec": 71.3,
+  "ttft_ms": 0,
+  "wall_time_s": 10.11,
+  "finish_reason": "end_turn",
+  "rubric": {
+    "correct_answer": true,
+    "old_wrong_answer": false,
+    "uses_bayes": true,
+    "shows_work": true
+  },
+  "auto_score": 5,
+  "max_score": 5,
+  "manual_score": null
+}

@@ -1,0 +1,19 @@
+{
+  "content": "# Bayes' Theorem: Identifying Error Source\n\n## Setting Up the Problem\n\n**Define Events:**\n| Event | Meaning | Prior Probability | Error Rate |\n|-------|---------|:-----------------:|:----------:|\n| A | Request from Server A | P(A) = 0.40 | P(E\\|A) = 0.01 |\n| B | Request from Server B | P(B) = 0.35 | P(E\\|B) = 0.02 |\n| C | Request from Server C | P(C) = 0.25 | P(E\\|C) = 0.03 |\n| E | Error occurs | \u2014 | \u2014 |\n\n**Goal:** Find **P(C | E)** \u2014 the probability the error came from Server C\n\n---\n\n## Step 1: Apply the Law of Total Probability\n\nCalculate the overall probability of an error, P(E):\n\n$$P(E) = P(E|A)\\cdot P(A) + P(E|B)\\cdot P(B) + P(E|C)\\cdot P(C)$$\n\n$$P(E) = (0.01)(0.40) + (0.02)(0.35) + (0.03)(0.25)$$\n\n$$P(E) = 0.0040 + 0.0070 + 0.0075 = \\boxed{0.0185}$$\n\n---\n\n## Step 2: Apply Bayes' Theorem\n\n$$P(C \\mid E) = \\frac{P(E \\mid C) \\cdot P(C)}{P(E)}$$\n\n$$P(C \\mid E) = \\frac{(0.03)(0.25)}{0.0185} = \\frac{0.0075}{0.0185}$$\n\n$$\\boxed{P(C \\mid E) \\approx 0.4054 \\approx 40.5\\%}$$\n\n---\n\n## Summary of All Posteriors\n\n| Server | Calculation | Posterior P(Server\\|E) |\n|--------|-------------|:---------------------:|\n| A | 0.0040 / 0.0185 | **21.6%** |\n| B | 0.0070 / 0.0185 | **37.8%** |\n| C | 0.0075 / 0.0185 | **40.5%** |\n| **Total** | | **100%** |\n\n---\n\n## Key Insight\n\n> Server C handles only **25% of traffic** but is responsible for **40.5% of reported errors** \u2014 because its error rate (3%) is **3\u00d7 higher** than Server A's.\n\nBayes' theorem shifts our belief *upward* for Server C precisely because high error rates make it a disproportionately likely culprit despite its smaller traffic share.",
+  "reasoning": "Let me solve this using Bayes' theorem.\n\nDefine the events:\n- A = request handled by Server A\n- B = request handled by Server B\n- C = request handled by Server C\n- E = error occurred\n\nGiven information:\n- P(A) = 0.40, P(E|A) = 0.01\n- P(B) = 0.35, P(E|B) = 0.02\n- P(C) = 0.25, P(E|C) = 0.03\n\nI need to find P(C|E) using Bayes' theorem. First, I'll calculate the total probability of an error occurring across all servers by summing the joint probabilities: (0.01)(0.40) + (0.02)(0.35) + (0.03)(0.25), which gives me 0.004 + 0.007 + 0.0075.\n\nThat totals to 0.0185. Now I can apply Bayes' theorem: P(C|E) = (0.03 \u00d7 0.25) / 0.0185 = 0.0075 / 0.0185, which simplifies to 15/37 or about 40.54%.",
+  "prompt_tokens": 93,
+  "completion_tokens": 1089,
+  "tokens_per_sec": 73.5,
+  "ttft_ms": 0,
+  "wall_time_s": 14.82,
+  "finish_reason": "end_turn",
+  "rubric": {
+    "correct_answer": true,
+    "old_wrong_answer": false,
+    "uses_bayes": true,
+    "shows_work": true
+  },
+  "auto_score": 5,
+  "max_score": 5,
+  "manual_score": null
+}

@@ -1,0 +1,321 @@
+{
+  "model": "gpt55",
+  "name": "GPT-5.5",
+  "model_id": "gpt-5.5",
+  "timestamp": "2026-06-13T02:37:39.729785+00:00",
+  "harness": "frontier-bakeoff-v1",
+  "task_1.1": {
+    "content": "#!/usr/bin/env python3\nimport argparse\nimport os\nimport shutil\nimport sqlite3\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\n\n\nAPP_NAME = \"todo\"\nDB_PATH = Path(os.environ.get(\"TODO_DB\", Path.home() / \".todo.sqlite3\"))\n\n\nclass TodoError(Exception):\n    pass\n\n\ndef now():\n    return datetime.now().replace(microsecond=0).isoformat(sep=\" \")\n\n\ndef connect(db_path=DB_PATH):\n    try:\n        conn = sqlite3.connect(db_path)\n        conn.row_factory = sqlite3.Row\n        return conn\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not open database: {exc}\") from exc\n\n\ndef init_db(conn):\n    try:\n        conn.execute(\n            \"\"\"\n            CREATE TABLE IF NOT EXISTS tasks (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                title TEXT NOT NULL,\n                completed INTEGER NOT NULL DEFAULT 0,\n                created_at TEXT NOT NULL,\n                updated_at TEXT NOT NULL,\n                completed_at TEXT\n            )\n            \"\"\"\n        )\n        conn.commit()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not initialize database: {exc}\") from exc\n\n\ndef add_task(conn, title):\n    title = \" \".join(title).strip() if isinstance(title, list) else title.strip()\n    if not title:\n        raise TodoError(\"Task title cannot be empty.\")\n\n    timestamp = now()\n    try:\n        cur = conn.execute(\n            \"\"\"\n            INSERT INTO tasks (title, completed, created_at, updated_at, completed_at)\n            VALUES (?, 0, ?, ?, NULL)\n            \"\"\",\n            (title, timestamp, timestamp),\n        )\n        conn.commit()\n        task = get_task(conn, cur.lastrowid)\n        print_task_detail(task, prefix=\"Added\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not add task: {exc}\") from exc\n\n\ndef get_task(conn, task_id):\n    try:\n        row = conn.execute(\"SELECT * FROM tasks WHERE id = ?\", (task_id,)).fetchone()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not retrieve task: {exc}\") from exc\n\n    if row is None:\n        raise TodoError(f\"No task found with id {task_id}.\")\n    return row\n\n\ndef list_tasks(conn, status):\n    query = \"SELECT * FROM tasks\"\n    params = []\n\n    if status == \"pending\":\n        query += \" WHERE completed = 0\"\n    elif status == \"completed\":\n        query += \" WHERE completed = 1\"\n\n    query += \" ORDER BY completed ASC, id ASC\"\n\n    try:\n        rows = conn.execute(query, params).fetchall()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not list tasks: {exc}\") from exc\n\n    print_task_table(rows)\n\n\ndef complete_task(conn, task_id):\n    task = get_task(conn, task_id)\n\n    if task[\"completed\"]:\n        print_task_detail(task, prefix=\"Already completed\")\n        return\n\n    timestamp = now()\n    try:\n        conn.execute(\n            \"\"\"\n            UPDATE tasks\n            SET completed = 1, updated_at = ?, completed_at = ?\n            WHERE id = ?\n            \"\"\",\n            (timestamp, timestamp, task_id),\n        )\n        conn.commit()\n        task = get_task(conn, task_id)\n        print_task_detail(task, prefix=\"Completed\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not complete task: {exc}\") from exc\n\n\ndef delete_task(conn, task_id):\n    task = get_task(conn, task_id)\n\n    try:\n        conn.execute(\"DELETE FROM tasks WHERE id = ?\", (task_id,))\n        conn.commit()\n        print_task_detail(task, prefix=\"Deleted\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not delete task: {exc}\") from exc\n\n\ndef truncate(text, width):\n    text = \"\" if text is None else str(text)\n    if width <= 0:\n        return \"\"\n    if len(text) <= width:\n        return text\n    if width == 1:\n        return \"\u2026\"\n    return text[: width - 1] + \"\u2026\"\n\n\ndef print_task_detail(task, prefix=\"Task\"):\n    status = \"\u2713 completed\" if task[\"completed\"] else \"\u2022 pending\"\n    print(f\"{prefix}: #{task['id']} [{status}] {task['title']}\")\n    print(f\"Created:   {task['created_at']}\")\n    print(f\"Updated:   {task['updated_at']}\")\n    if task[\"completed_at\"]:\n        print(f\"Completed: {task['completed_at']}\")\n\n\ndef print_task_table(rows):\n    if not rows:\n        print(\"No tasks found.\")\n        return\n\n    terminal_width = shutil.get_terminal_size((100, 20)).columns\n\n    headers = [\"ID\", \"Status\", \"Task\", \"Created\", \"Updated\", \"Completed\"]\n    fixed_widths = {\n        \"ID\": max(2, min(6, max(len(str(row[\"id\"])) for row in rows))),\n        \"Status\": 9,\n        \"Created\": 19,\n        \"Updated\": 19,\n        \"Completed\": 19,\n    }\n\n    separators = 3 * (len(headers) - 1)\n    fixed_total = sum(fixed_widths.values()) + separators\n    task_width = max(12, terminal_width - fixed_total)\n    task_width = min(task_width, 60)\n\n    widths = {\n        \"ID\": fixed_widths[\"ID\"],\n        \"Status\": fixed_widths[\"Status\"],\n        \"Task\": task_width,\n        \"Created\": fixed_widths[\"Created\"],\n        \"Updated\": fixed_widths[\"Updated\"],\n        \"Completed\": fixed_widths[\"Completed\"],\n    }\n\n    def line(char=\"-\"):\n        return char * (\n            sum(widths[h] for h in headers) + separators\n        )\n\n    def row(values):\n        return \" | \".join(\n            truncate(values[h], widths[h]).ljust(widths[h]) for h in headers\n        )\n\n    print(row({h: h for h in headers}))\n    print(line())\n\n    for task in rows:\n        values = {\n            \"ID\": str(task[\"id\"]),\n            \"Status\": \"done\" if task[\"completed\"] else \"pending\",\n            \"Task\": task[\"title\"],\n            \"Created\": task[\"created_at\"],\n            \"Updated\": task[\"updated_at\"],\n            \"Completed\": task[\"completed_at\"] or \"\",\n        }\n        print(row(values))\n\n\ndef positive_int(value):\n    try:\n        number = int(value)\n    except ValueError:\n        raise argparse.ArgumentTypeError(\"must be an integer\")\n    if number <= 0:\n        raise argparse.ArgumentTypeError(\"must be a positive integer\")\n    return number\n\n\ndef build_parser():\n    parser = argparse.ArgumentParser(\n        prog=APP_NAME,\n        description=\"A small SQLite-backed command-line todo app.\",\n    )\n    parser.add_argument(\n        \"--db\",\n        default=str(DB_PATH),\n        help=f\"SQLite database path. Defaults to {DB_PATH}\",\n    )\n\n    subparsers = parser.add_subparsers(dest=\"command\", required=True)\n\n    add_parser = subparsers.add_parser(\"add\", help=\"Add a new task.\")\n    add_parser.add_argument(\"title\", nargs=\"+\", help=\"Task title.\")\n\n    list_parser = subparsers.add_parser(\"list\", help=\"List tasks.\")\n    list_group = list_parser.add_mutually_exclusive_group()\n    list_group.add_argument(\n        \"--all\",\n        action=\"store_const\",\n        const=\"all\",\n        dest=\"status\",\n        help=\"Show all tasks.\",\n    )\n    list_group.add_argument(\n        \"--pending\",\n        action=\"store_const\",\n        const=\"pending\",\n        dest=\"status\",\n        help=\"Show pending tasks.\",\n    )\n    list_group.add_argument(\n        \"--completed\",\n        action=\"store_const\",\n        const=\"completed\",\n        dest=\"status\",\n        help=\"Show completed tasks.\",\n    )\n    list_parser.set_defaults(status=\"all\")\n\n    complete_parser = subparsers.add_parser(\"complete\", help=\"Mark a task as completed.\")\n    complete_parser.add_argument(\"id\", type=positive_int, help=\"Task id.\")\n\n    delete_parser = subparsers.add_parser(\"delete\", help=\"Delete a task.\")\n    delete_parser.add_argument(\"id\", type=positive_int, help=\"Task id.\")\n\n    return parser\n\n\ndef run(args):\n    db_path = Path(args.db).expanduser()\n\n    try:\n        db_path.parent.mkdir(parents=True, exist_ok=True)\n    except OSError as exc:\n        raise TodoError(f\"Could not create database directory: {exc}\") from exc\n\n    with connect(db_path) as conn:\n        init_db(conn)\n\n        if args.command == \"add\":\n            add_task(conn, args.title)\n        elif args.command == \"list\":\n            list_tasks(conn, args.status)\n        elif args.command == \"complete\":\n            complete_task(conn, args.id)\n        elif args.command == \"delete\":\n            delete_task(conn, args.id)\n        else:\n            raise TodoError(f\"Unknown command: {args.command}\")\n\n\ndef main(argv=None):\n    parser = build_parser()\n    args = parser.parse_args(argv)\n\n    try:\n        run(args)\n        return 0\n    except TodoError as exc:\n        print(f\"Error: {exc}\", file=sys.stderr)\n        return 1\n    except KeyboardInterrupt:\n        print(\"\\nError: interrupted\", file=sys.stderr)\n        return 130\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())",
+    "reasoning": "",
+    "prompt_tokens": 62,
+    "completion_tokens": 2282,
+    "tokens_per_sec": 85.5,
+    "ttft_ms": 0,
+    "wall_time_s": 26.69,
+    "finish_reason": "stop",
+    "code": "#!/usr/bin/env python3\nimport argparse\nimport os\nimport shutil\nimport sqlite3\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\n\n\nAPP_NAME = \"todo\"\nDB_PATH = Path(os.environ.get(\"TODO_DB\", Path.home() / \".todo.sqlite3\"))\n\n\nclass TodoError(Exception):\n    pass\n\n\ndef now():\n    return datetime.now().replace(microsecond=0).isoformat(sep=\" \")\n\n\ndef connect(db_path=DB_PATH):\n    try:\n        conn = sqlite3.connect(db_path)\n        conn.row_factory = sqlite3.Row\n        return conn\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not open database: {exc}\") from exc\n\n\ndef init_db(conn):\n    try:\n        conn.execute(\n            \"\"\"\n            CREATE TABLE IF NOT EXISTS tasks (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                title TEXT NOT NULL,\n                completed INTEGER NOT NULL DEFAULT 0,\n                created_at TEXT NOT NULL,\n                updated_at TEXT NOT NULL,\n                completed_at TEXT\n            )\n            \"\"\"\n        )\n        conn.commit()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not initialize database: {exc}\") from exc\n\n\ndef add_task(conn, title):\n    title = \" \".join(title).strip() if isinstance(title, list) else title.strip()\n    if not title:\n        raise TodoError(\"Task title cannot be empty.\")\n\n    timestamp = now()\n    try:\n        cur = conn.execute(\n            \"\"\"\n            INSERT INTO tasks (title, completed, created_at, updated_at, completed_at)\n            VALUES (?, 0, ?, ?, NULL)\n            \"\"\",\n            (title, timestamp, timestamp),\n        )\n        conn.commit()\n        task = get_task(conn, cur.lastrowid)\n        print_task_detail(task, prefix=\"Added\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not add task: {exc}\") from exc\n\n\ndef get_task(conn, task_id):\n    try:\n        row = conn.execute(\"SELECT * FROM tasks WHERE id = ?\", (task_id,)).fetchone()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not retrieve task: {exc}\") from exc\n\n    if row is None:\n        raise TodoError(f\"No task found with id {task_id}.\")\n    return row\n\n\ndef list_tasks(conn, status):\n    query = \"SELECT * FROM tasks\"\n    params = []\n\n    if status == \"pending\":\n        query += \" WHERE completed = 0\"\n    elif status == \"completed\":\n        query += \" WHERE completed = 1\"\n\n    query += \" ORDER BY completed ASC, id ASC\"\n\n    try:\n        rows = conn.execute(query, params).fetchall()\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not list tasks: {exc}\") from exc\n\n    print_task_table(rows)\n\n\ndef complete_task(conn, task_id):\n    task = get_task(conn, task_id)\n\n    if task[\"completed\"]:\n        print_task_detail(task, prefix=\"Already completed\")\n        return\n\n    timestamp = now()\n    try:\n        conn.execute(\n            \"\"\"\n            UPDATE tasks\n            SET completed = 1, updated_at = ?, completed_at = ?\n            WHERE id = ?\n            \"\"\",\n            (timestamp, timestamp, task_id),\n        )\n        conn.commit()\n        task = get_task(conn, task_id)\n        print_task_detail(task, prefix=\"Completed\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not complete task: {exc}\") from exc\n\n\ndef delete_task(conn, task_id):\n    task = get_task(conn, task_id)\n\n    try:\n        conn.execute(\"DELETE FROM tasks WHERE id = ?\", (task_id,))\n        conn.commit()\n        print_task_detail(task, prefix=\"Deleted\")\n    except sqlite3.Error as exc:\n        raise TodoError(f\"Could not delete task: {exc}\") from exc\n\n\ndef truncate(text, width):\n    text = \"\" if text is None else str(text)\n    if width <= 0:\n        return \"\"\n    if len(text) <= width:\n        return text\n    if width == 1:\n        return \"\u2026\"\n    return text[: width - 1] + \"\u2026\"\n\n\ndef print_task_detail(task, prefix=\"Task\"):\n    status = \"\u2713 completed\" if task[\"completed\"] else \"\u2022 pending\"\n    print(f\"{prefix}: #{task['id']} [{status}] {task['title']}\")\n    print(f\"Created:   {task['created_at']}\")\n    print(f\"Updated:   {task['updated_at']}\")\n    if task[\"completed_at\"]:\n        print(f\"Completed: {task['completed_at']}\")\n\n\ndef print_task_table(rows):\n    if not rows:\n        print(\"No tasks found.\")\n        return\n\n    terminal_width = shutil.get_terminal_size((100, 20)).columns\n\n    headers = [\"ID\", \"Status\", \"Task\", \"Created\", \"Updated\", \"Completed\"]\n    fixed_widths = {\n        \"ID\": max(2, min(6, max(len(str(row[\"id\"])) for row in rows))),\n        \"Status\": 9,\n        \"Created\": 19,\n        \"Updated\": 19,\n        \"Completed\": 19,\n    }\n\n    separators = 3 * (len(headers) - 1)\n    fixed_total = sum(fixed_widths.values()) + separators\n    task_width = max(12, terminal_width - fixed_total)\n    task_width = min(task_width, 60)\n\n    widths = {\n        \"ID\": fixed_widths[\"ID\"],\n        \"Status\": fixed_widths[\"Status\"],\n        \"Task\": task_width,\n        \"Created\": fixed_widths[\"Created\"],\n        \"Updated\": fixed_widths[\"Updated\"],\n        \"Completed\": fixed_widths[\"Completed\"],\n    }\n\n    def line(char=\"-\"):\n        return char * (\n            sum(widths[h] for h in headers) + separators\n        )\n\n    def row(values):\n        return \" | \".join(\n            truncate(values[h], widths[h]).ljust(widths[h]) for h in headers\n        )\n\n    print(row({h: h for h in headers}))\n    print(line())\n\n    for task in rows:\n        values = {\n            \"ID\": str(task[\"id\"]),\n            \"Status\": \"done\" if task[\"completed\"] else \"pending\",\n            \"Task\": task[\"title\"],\n            \"Created\": task[\"created_at\"],\n            \"Updated\": task[\"updated_at\"],\n            \"Completed\": task[\"completed_at\"] or \"\",\n        }\n        print(row(values))\n\n\ndef positive_int(value):\n    try:\n        number = int(value)\n    except ValueError:\n        raise argparse.ArgumentTypeError(\"must be an integer\")\n    if number <= 0:\n        raise argparse.ArgumentTypeError(\"must be a positive integer\")\n    return number\n\n\ndef build_parser():\n    parser = argparse.ArgumentParser(\n        prog=APP_NAME,\n        description=\"A small SQLite-backed command-line todo app.\",\n    )\n    parser.add_argument(\n        \"--db\",\n        default=str(DB_PATH),\n        help=f\"SQLite database path. Defaults to {DB_PATH}\",\n    )\n\n    subparsers = parser.add_subparsers(dest=\"command\", required=True)\n\n    add_parser = subparsers.add_parser(\"add\", help=\"Add a new task.\")\n    add_parser.add_argument(\"title\", nargs=\"+\", help=\"Task title.\")\n\n    list_parser = subparsers.add_parser(\"list\", help=\"List tasks.\")\n    list_group = list_parser.add_mutually_exclusive_group()\n    list_group.add_argument(\n        \"--all\",\n        action=\"store_const\",\n        const=\"all\",\n        dest=\"status\",\n        help=\"Show all tasks.\",\n    )\n    list_group.add_argument(\n        \"--pending\",\n        action=\"store_const\",\n        const=\"pending\",\n        dest=\"status\",\n        help=\"Show pending tasks.\",\n    )\n    list_group.add_argument(\n        \"--completed\",\n        action=\"store_const\",\n        const=\"completed\",\n        dest=\"status\",\n        help=\"Show completed tasks.\",\n    )\n    list_parser.set_defaults(status=\"all\")\n\n    complete_parser = subparsers.add_parser(\"complete\", help=\"Mark a task as completed.\")\n    complete_parser.add_argument(\"id\", type=positive_int, help=\"Task id.\")\n\n    delete_parser = subparsers.add_parser(\"delete\", help=\"Delete a task.\")\n    delete_parser.add_argument(\"id\", type=positive_int, help=\"Task id.\")\n\n    return parser\n\n\ndef run(args):\n    db_path = Path(args.db).expanduser()\n\n    try:\n        db_path.parent.mkdir(parents=True, exist_ok=True)\n    except OSError as exc:\n        raise TodoError(f\"Could not create database directory: {exc}\") from exc\n\n    with connect(db_path) as conn:\n        init_db(conn)\n\n        if args.command == \"add\":\n            add_task(conn, args.title)\n        elif args.command == \"list\":\n            list_tasks(conn, args.status)\n        elif args.command == \"complete\":\n            complete_task(conn, args.id)\n        elif args.command == \"delete\":\n            delete_task(conn, args.id)\n        else:\n            raise TodoError(f\"Unknown command: {args.command}\")\n\n\ndef main(argv=None):\n    parser = build_parser()\n    args = parser.parse_args(argv)\n\n    try:\n        run(args)\n        return 0\n    except TodoError as exc:\n        print(f\"Error: {exc}\", file=sys.stderr)\n        return 1\n    except KeyboardInterrupt:\n        print(\"\\nError: interrupted\", file=sys.stderr)\n        return 130\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())",
+    "lines": 311,
+    "syntax_valid": true,
+    "features": {
+      "sqlite": true,
+      "add": true,
+      "list": true,
+      "complete": true,
+      "delete": true,
+      "timestamps": true,
+      "completion_tracking": true,
+      "error_handling": true,
+      "main_block": true,
+      "pretty_output": true
+    },
+    "feature_score": 10,
+    "feature_max": 10,
+    "functional": {
+      "score": 7,
+      "max": 7,
+      "details": [
+        "PASS: add item 1",
+        "PASS: add item 2",
+        "PASS: list shows both items",
+        "PASS: complete item 1",
+        "PASS: list shows completion status",
+        "PASS: delete item 2",
+        "PASS: list confirms deletion"
+      ]
+    },
+    "composite_score": 100.0
+  },
+  "task_1.2": {
+    "content": "```python\nimport secrets\nimport sqlite3\nimport string\nimport time\nfrom collections import defaultdict, deque\nfrom contextlib import contextmanager\nfrom datetime import datetime, timezone\nfrom threading import Lock\n\nfrom fastapi import FastAPI, HTTPException, Request\nfrom fastapi.responses import JSONResponse, RedirectResponse\nfrom pydantic import AnyHttpUrl, BaseModel\n\nDATABASE = \"url_shortener.db\"\nCODE_LENGTH = 7\nALPHABET = string.ascii_letters + string.digits\nRATE_LIMIT = 10\nRATE_LIMIT_WINDOW = 60\n\napp = FastAPI(title=\"URL Shortener\")\n\ndb_lock = Lock()\nrate_limit_lock = Lock()\nrequest_times = defaultdict(deque)\n\n\nclass ShortenRequest(BaseModel):\n    url: AnyHttpUrl\n\n\n@contextmanager\ndef get_db():\n    conn = sqlite3.connect(DATABASE, timeout=10, check_same_thread=False)\n    conn.row_factory = sqlite3.Row\n    try:\n        yield conn\n    finally:\n        conn.close()\n\n\ndef init_db():\n    with get_db() as conn:\n        conn.execute(\n            \"\"\"\n            CREATE TABLE IF NOT EXISTS urls (\n                code TEXT PRIMARY KEY,\n                original_url TEXT NOT NULL,\n                clicks INTEGER NOT NULL DEFAULT 0,\n                created_at TEXT NOT NULL\n            )\n            \"\"\"\n        )\n        conn.commit()\n\n\ndef generate_code():\n    return \"\".join(secrets.choice(ALPHABET) for _ in range(CODE_LENGTH))\n\n\ndef create_unique_code():\n    while True:\n        code = generate_code()\n        with get_db() as conn:\n            existing = conn.execute(\n                \"SELECT 1 FROM urls WHERE code = ?\",\n                (code,),\n            ).fetchone()\n            if not existing:\n                return code\n\n\n@app.on_event(\"startup\")\ndef startup():\n    init_db()\n\n\n@app.middleware(\"http\")\nasync def rate_limit_middleware(request: Request, call_next):\n    ip = request.client.host if request.client else \"unknown\"\n    now = time.monotonic()\n\n    with rate_limit_lock:\n        timestamps = request_times[ip]\n\n        while timestamps and now - timestamps[0] >= RATE_LIMIT_WINDOW:\n            timestamps.popleft()\n\n        if len(timestamps) >= RATE_LIMIT:\n            return JSONResponse(\n                status_code=429,\n                content={\"detail\": \"Rate limit exceeded. Try again later.\"},\n            )\n\n        timestamps.append(now)\n\n    return await call_next(request)\n\n\n@app.post(\"/shorten\")\ndef shorten_url(payload: ShortenRequest):\n    code = create_unique_code()\n    created_at = datetime.now(timezone.utc).isoformat()\n\n    with db_lock:\n        with get_db() as conn:\n            conn.execute(\n                \"\"\"\n                INSERT INTO urls (code, original_url, clicks, created_at)\n                VALUES (?, ?, 0, ?)\n                \"\"\",\n                (code, str(payload.url), created_at),\n            )\n            conn.commit()\n\n    return {\"code\": code}\n\n\n@app.get(\"/stats/{code}\")\ndef get_stats(code: str):\n    with get_db() as conn:\n        row = conn.execute(\n            \"\"\"\n            SELECT code, clicks, created_at\n            FROM urls\n            WHERE code = ?\n            \"\"\",\n            (code,),\n        ).fetchone()\n\n    if row is None:\n        raise HTTPException(status_code=404, detail=\"Short code not found\")\n\n    return {\n        \"code\": row[\"code\"],\n        \"click_count\": row[\"clicks\"],\n        \"creation_date\": row[\"created_at\"],\n    }\n\n\n@app.get(\"/{code}\")\ndef redirect_to_url(code: str):\n    with db_lock:\n        with get_db() as conn:\n            row = conn.execute(\n                \"\"\"\n                SELECT original_url\n                FROM urls\n                WHERE code = ?\n                \"\"\",\n                (code,),\n            ).fetchone()\n\n            if row is None:\n                raise HTTPException(status_code=404, detail=\"Short code not found\")\n\n            conn.execute(\n                \"\"\"\n                UPDATE urls\n                SET clicks = clicks + 1\n                WHERE code = ?\n                \"\"\",\n                (code,),\n            )\n            conn.commit()\n\n    return RedirectResponse(url=row[\"original_url\"], status_code=302)\n\n\nif __name__ == \"__main__\":\n    import uvicorn\n\n    init_db()\n    uvicorn.run(app, host=\"0.0.0.0\", port=8000)\n```",
+    "reasoning": "",
+    "prompt_tokens": 90,
+    "completion_tokens": 1404,
+    "tokens_per_sec": 64.6,
+    "ttft_ms": 0,
+    "wall_time_s": 21.72,
+    "finish_reason": "stop",
+    "code": "import secrets\nimport sqlite3\nimport string\nimport time\nfrom collections import defaultdict, deque\nfrom contextlib import contextmanager\nfrom datetime import datetime, timezone\nfrom threading import Lock\n\nfrom fastapi import FastAPI, HTTPException, Request\nfrom fastapi.responses import JSONResponse, RedirectResponse\nfrom pydantic import AnyHttpUrl, BaseModel\n\nDATABASE = \"url_shortener.db\"\nCODE_LENGTH = 7\nALPHABET = string.ascii_letters + string.digits\nRATE_LIMIT = 10\nRATE_LIMIT_WINDOW = 60\n\napp = FastAPI(title=\"URL Shortener\")\n\ndb_lock = Lock()\nrate_limit_lock = Lock()\nrequest_times = defaultdict(deque)\n\n\nclass ShortenRequest(BaseModel):\n    url: AnyHttpUrl\n\n\n@contextmanager\ndef get_db():\n    conn = sqlite3.connect(DATABASE, timeout=10, check_same_thread=False)\n    conn.row_factory = sqlite3.Row\n    try:\n        yield conn\n    finally:\n        conn.close()\n\n\ndef init_db():\n    with get_db() as conn:\n        conn.execute(\n            \"\"\"\n            CREATE TABLE IF NOT EXISTS urls (\n                code TEXT PRIMARY KEY,\n                original_url TEXT NOT NULL,\n                clicks INTEGER NOT NULL DEFAULT 0,\n                created_at TEXT NOT NULL\n            )\n            \"\"\"\n        )\n        conn.commit()\n\n\ndef generate_code():\n    return \"\".join(secrets.choice(ALPHABET) for _ in range(CODE_LENGTH))\n\n\ndef create_unique_code():\n    while True:\n        code = generate_code()\n        with get_db() as conn:\n            existing = conn.execute(\n                \"SELECT 1 FROM urls WHERE code = ?\",\n                (code,),\n            ).fetchone()\n            if not existing:\n                return code\n\n\n@app.on_event(\"startup\")\ndef startup():\n    init_db()\n\n\n@app.middleware(\"http\")\nasync def rate_limit_middleware(request: Request, call_next):\n    ip = request.client.host if request.client else \"unknown\"\n    now = time.monotonic()\n\n    with rate_limit_lock:\n        timestamps = request_times[ip]\n\n        while timestamps and now - timestamps[0] >= RATE_LIMIT_WINDOW:\n            timestamps.popleft()\n\n        if len(timestamps) >= RATE_LIMIT:\n            return JSONResponse(\n                status_code=429,\n                content={\"detail\": \"Rate limit exceeded. Try again later.\"},\n            )\n\n        timestamps.append(now)\n\n    return await call_next(request)\n\n\n@app.post(\"/shorten\")\ndef shorten_url(payload: ShortenRequest):\n    code = create_unique_code()\n    created_at = datetime.now(timezone.utc).isoformat()\n\n    with db_lock:\n        with get_db() as conn:\n            conn.execute(\n                \"\"\"\n                INSERT INTO urls (code, original_url, clicks, created_at)\n                VALUES (?, ?, 0, ?)\n                \"\"\",\n                (code, str(payload.url), created_at),\n            )\n            conn.commit()\n\n    return {\"code\": code}\n\n\n@app.get(\"/stats/{code}\")\ndef get_stats(code: str):\n    with get_db() as conn:\n        row = conn.execute(\n            \"\"\"\n            SELECT code, clicks, created_at\n            FROM urls\n            WHERE code = ?\n            \"\"\",\n            (code,),\n        ).fetchone()\n\n    if row is None:\n        raise HTTPException(status_code=404, detail=\"Short code not found\")\n\n    return {\n        \"code\": row[\"code\"],\n        \"click_count\": row[\"clicks\"],\n        \"creation_date\": row[\"created_at\"],\n    }\n\n\n@app.get(\"/{code}\")\ndef redirect_to_url(code: str):\n    with db_lock:\n        with get_db() as conn:\n            row = conn.execute(\n                \"\"\"\n                SELECT original_url\n                FROM urls\n                WHERE code = ?\n                \"\"\",\n                (code,),\n            ).fetchone()\n\n            if row is None:\n                raise HTTPException(status_code=404, detail=\"Short code not found\")\n\n            conn.execute(\n                \"\"\"\n                UPDATE urls\n                SET clicks = clicks + 1\n                WHERE code = ?\n                \"\"\",\n                (code,),\n            )\n            conn.commit()\n\n    return RedirectResponse(url=row[\"original_url\"], status_code=302)\n\n\nif __name__ == \"__main__\":\n    import uvicorn\n\n    init_db()\n    uvicorn.run(app, host=\"0.0.0.0\", port=8000)",
+    "lines": 173,
+    "syntax_valid": true,
+    "features": {
+      "post_endpoint": true,
+      "get_redirect": true,
+      "stats_endpoint": true,
+      "sqlite": true,
+      "validation": true,
+      "rate_limit": true,
+      "error_handling": true,
+      "http_status": true
+    },
+    "feature_score": 8,
+    "feature_max": 8,
+    "functional": {
+      "score": 0,
+      "max": 6,
+      "details": "Manual or server-based testing required"
+    },
+    "composite_score": 60.0
+  },
+  "task_1.3": {
+    "content": "class ListNode<K, V> {\n  key: K | null;\n  value: V | null;\n  prev: ListNode<K, V> | null = null;\n  next: ListNode<K, V> | null = null;\n\n  constructor(key: K | null = null, value: V | null = null) {\n    this.key = key;\n    this.value = value;\n  }\n}\n\nexport class LRUCache<K, V> {\n  private readonly capacity: number;\n  private readonly map = new Map<K, ListNode<K, V>>();\n  private readonly head = new ListNode<K, V>();\n  private readonly tail = new ListNode<K, V>();\n\n  constructor(capacity: number) {\n    if (!Number.isInteger(capacity) || capacity <= 0) {\n      throw new RangeError(\"Capacity must be a positive integer\");\n    }\n\n    this.capacity = capacity;\n    this.head.next = this.tail;\n    this.tail.prev = this.head;\n  }\n\n  get(key: K): V | -1 {\n    const node = this.map.get(key);\n\n    if (!node) {\n      return -1;\n    }\n\n    this.moveToFront(node);\n    return node.value as V;\n  }\n\n  put(key: K, value: V): void {\n    const existingNode = this.map.get(key);\n\n    if (existingNode) {\n      existingNode.value = value;\n      this.moveToFront(existingNode);\n      return;\n    }\n\n    if (this.map.size === this.capacity) {\n      const leastRecentlyUsed = this.tail.prev;\n\n      if (leastRecentlyUsed && leastRecentlyUsed !== this.head) {\n        this.removeNode(leastRecentlyUsed);\n        this.map.delete(leastRecentlyUsed.key as K);\n      }\n    }\n\n    const newNode = new ListNode(key, value);\n    this.map.set(key, newNode);\n    this.addToFront(newNode);\n  }\n\n  private moveToFront(node: ListNode<K, V>): void {\n    this.removeNode(node);\n    this.addToFront(node);\n  }\n\n  private addToFront(node: ListNode<K, V>): void {\n    node.prev = this.head;\n    node.next = this.head.next;\n\n    if (this.head.next) {\n      this.head.next.prev = node;\n    }\n\n    this.head.next = node;\n  }\n\n  private removeNode(node: ListNode<K, V>): void {\n    if (node.prev) {\n      node.prev.next = node.next;\n    }\n\n    if (node.next) {\n      node.next.prev = node.prev;\n    }\n\n    node.prev = null;\n    node.next = null;\n  }\n}\n\nconst basicCache = new LRUCache<number, number>(2);\nbasicCache.put(1, 10);\nbasicCache.put(2, 20);\nconsole.assert(basicCache.get(1) === 10, \"basic get/put: expected key 1 to return 10\");\nconsole.assert(basicCache.get(2) === 20, \"basic get/put: expected key 2 to return 20\");\nconsole.assert(basicCache.get(3) === -1, \"basic get/put: expected missing key to return -1\");\n\nconst evictionCache = new LRUCache<number, number>(2);\nevictionCache.put(1, 10);\nevictionCache.put(2, 20);\nevictionCache.put(3, 30);\nconsole.assert(evictionCache.get(1) === -1, \"capacity eviction: expected key 1 to be evicted\");\nconsole.assert(evictionCache.get(2) === 20, \"capacity eviction: expected key 2 to remain\");\nconsole.assert(evictionCache.get(3) === 30, \"capacity eviction: expected key 3 to remain\");\n\nconst accessOrderCache = new LRUCache<number, number>(2);\naccessOrderCache.put(1, 10);\naccessOrderCache.put(2, 20);\nconsole.assert(accessOrderCache.get(1) === 10, \"access-order update: expected key 1 to return 10\");\naccessOrderCache.put(3, 30);\nconsole.assert(accessOrderCache.get(2) === -1, \"access-order update: expected key 2 to be evicted\");\nconsole.assert(accessOrderCache.get(1) === 10, \"access-order update: expected key 1 to remain\");\nconsole.assert(accessOrderCache.get(3) === 30, \"access-order update: expected key 3 to remain\");\n\nconst overwriteCache = new LRUCache<number, number>(2);\noverwriteCache.put(1, 10);\noverwriteCache.put(2, 20);\noverwriteCache.put(1, 100);\nconsole.assert(overwriteCache.get(1) === 100, \"overwrite existing key: expected key 1 to return updated value\");\noverwriteCache.put(3, 30);\nconsole.assert(overwriteCache.get(2) === -1, \"overwrite existing key: expected key 2 to be evicted\");\nconsole.assert(overwriteCache.get(1) === 100, \"overwrite existing key: expected key 1 to remain\");\nconsole.assert(overwriteCache.get(3) === 30, \"overwrite existing key: expected key 3 to remain\");",
+    "reasoning": "",
+    "prompt_tokens": 105,
+    "completion_tokens": 1600,
+    "tokens_per_sec": 52.4,
+    "ttft_ms": 0,
+    "wall_time_s": 30.53,
+    "finish_reason": "stop",
+    "code": "class ListNode<K, V> {\n  key: K | null;\n  value: V | null;\n  prev: ListNode<K, V> | null = null;\n  next: ListNode<K, V> | null = null;\n\n  constructor(key: K | null = null, value: V | null = null) {\n    this.key = key;\n    this.value = value;\n  }\n}\n\nexport class LRUCache<K, V> {\n  private readonly capacity: number;\n  private readonly map = new Map<K, ListNode<K, V>>();\n  private readonly head = new ListNode<K, V>();\n  private readonly tail = new ListNode<K, V>();\n\n  constructor(capacity: number) {\n    if (!Number.isInteger(capacity) || capacity <= 0) {\n      throw new RangeError(\"Capacity must be a positive integer\");\n    }\n\n    this.capacity = capacity;\n    this.head.next = this.tail;\n    this.tail.prev = this.head;\n  }\n\n  get(key: K): V | -1 {\n    const node = this.map.get(key);\n\n    if (!node) {\n      return -1;\n    }\n\n    this.moveToFront(node);\n    return node.value as V;\n  }\n\n  put(key: K, value: V): void {\n    const existingNode = this.map.get(key);\n\n    if (existingNode) {\n      existingNode.value = value;\n      this.moveToFront(existingNode);\n      return;\n    }\n\n    if (this.map.size === this.capacity) {\n      const leastRecentlyUsed = this.tail.prev;\n\n      if (leastRecentlyUsed && leastRecentlyUsed !== this.head) {\n        this.removeNode(leastRecentlyUsed);\n        this.map.delete(leastRecentlyUsed.key as K);\n      }\n    }\n\n    const newNode = new ListNode(key, value);\n    this.map.set(key, newNode);\n    this.addToFront(newNode);\n  }\n\n  private moveToFront(node: ListNode<K, V>): void {\n    this.removeNode(node);\n    this.addToFront(node);\n  }\n\n  private addToFront(node: ListNode<K, V>): void {\n    node.prev = this.head;\n    node.next = this.head.next;\n\n    if (this.head.next) {\n      this.head.next.prev = node;\n    }\n\n    this.head.next = node;\n  }\n\n  private removeNode(node: ListNode<K, V>): void {\n    if (node.prev) {\n      node.prev.next = node.next;\n    }\n\n    if (node.next) {\n      node.next.prev = node.prev;\n    }\n\n    node.prev = null;\n    node.next = null;\n  }\n}\n\nconst basicCache = new LRUCache<number, number>(2);\nbasicCache.put(1, 10);\nbasicCache.put(2, 20);\nconsole.assert(basicCache.get(1) === 10, \"basic get/put: expected key 1 to return 10\");\nconsole.assert(basicCache.get(2) === 20, \"basic get/put: expected key 2 to return 20\");\nconsole.assert(basicCache.get(3) === -1, \"basic get/put: expected missing key to return -1\");\n\nconst evictionCache = new LRUCache<number, number>(2);\nevictionCache.put(1, 10);\nevictionCache.put(2, 20);\nevictionCache.put(3, 30);\nconsole.assert(evictionCache.get(1) === -1, \"capacity eviction: expected key 1 to be evicted\");\nconsole.assert(evictionCache.get(2) === 20, \"capacity eviction: expected key 2 to remain\");\nconsole.assert(evictionCache.get(3) === 30, \"capacity eviction: expected key 3 to remain\");\n\nconst accessOrderCache = new LRUCache<number, number>(2);\naccessOrderCache.put(1, 10);\naccessOrderCache.put(2, 20);\nconsole.assert(accessOrderCache.get(1) === 10, \"access-order update: expected key 1 to return 10\");\naccessOrderCache.put(3, 30);\nconsole.assert(accessOrderCache.get(2) === -1, \"access-order update: expected key 2 to be evicted\");\nconsole.assert(accessOrderCache.get(1) === 10, \"access-order update: expected key 1 to remain\");\nconsole.assert(accessOrderCache.get(3) === 30, \"access-order update: expected key 3 to remain\");\n\nconst overwriteCache = new LRUCache<number, number>(2);\noverwriteCache.put(1, 10);\noverwriteCache.put(2, 20);\noverwriteCache.put(1, 100);\nconsole.assert(overwriteCache.get(1) === 100, \"overwrite existing key: expected key 1 to return updated value\");\noverwriteCache.put(3, 30);\nconsole.assert(overwriteCache.get(2) === -1, \"overwrite existing key: expected key 2 to be evicted\");\nconsole.assert(overwriteCache.get(1) === 100, \"overwrite existing key: expected key 1 to remain\");\nconsole.assert(overwriteCache.get(3) === 30, \"overwrite existing key: expected key 3 to remain\");",
+    "lines": 125,
+    "syntax_valid": true,
+    "features": {
+      "constructor_capacity": true,
+      "get_method": true,
+      "put_method": true,
+      "o1_impl": true,
+      "eviction": true,
+      "test_suite": true
+    },
+    "feature_score": 6,
+    "feature_max": 6,
+    "functional": {
+      "score": 14,
+      "max": 14,
+      "details": "All 14 assertions passed"
+    },
+    "composite_score": 100.0
+  },
+  "task_2.1": {
+    "content": "Minimal fix: make the auth middleware read the same header that `/login` sends: `x-auth-token`.\n\n### Changed `middleware/auth.js`\n\n```javascript\n// Authentication middleware\nfunction authMiddleware(req, res, next) {\n  const token = req.headers['x-auth-token'];\n\n  if (!token) {\n    return res.status(401).json({ error: 'No token provided' });\n  }\n\n  try {\n    const decoded = Buffer.from(token, 'base64').toString('utf8');\n    const [userId, timestamp] = decoded.split(':');\n\n    if (!userId || !timestamp) {\n      return res.status(401).json({ error: 'Invalid token format' });\n    }\n\n    // Token expires after 1 hour\n    if (Date.now() - parseInt(timestamp) > 3600000) {\n      return res.status(401).json({ error: 'Token expired' });\n    }\n\n    req.userId = parseInt(userId);\n    next();\n  } catch (err) {\n    return res.status(401).json({ error: 'Invalid token' });\n  }\n}\n\nmodule.exports = authMiddleware;\n```\n\n### What changed\n\nOnly this line changed:\n\n```javascript\nconst token = req.headers.authorization;\n```\n\nto:\n\n```javascript\nconst token = req.headers['x-auth-token'];\n```\n\n### Why\n\nThe login route sends the token using this response header:\n\n```javascript\nres.set('x-auth-token', token);\n```\n\nSo protected requests should provide the token back using the same header:\n\n```http\nx-auth-token: <token>\n```\n\nThe middleware was checking `authorization`, so it never found the token and returned `401 No token provided`. This makes both sides use `x-auth-token` consistently.",
+    "reasoning": "",
+    "prompt_tokens": 890,
+    "completion_tokens": 550,
+    "tokens_per_sec": 64.5,
+    "ttft_ms": 0,
+    "wall_time_s": 8.53,
+    "finish_reason": "stop",
+    "scoring": {
+      "found_bug": true,
+      "minimal_fix": true,
+      "no_breakage": true,
+      "explanation_quality": 0,
+      "auto_score": 5
+    }
+  },
+  "task_2.2": {
+    "content": "Here are drop-in updated versions of both files.\n\n**app.py**\n```python\n\"\"\"Simple Flask REST API with items and pagination.\"\"\"\nfrom math import ceil\n\nfrom flask import Flask, jsonify, request\n\napp = Flask(__name__)\n\n# Seed 50 items\nitems = [{\"id\": i, \"name\": f\"Item {i}\", \"description\": f\"Description for item {i}\"} for i in range(1, 51)]\n\n\ndef _get_positive_int_query_param(name, default):\n    \"\"\"Parse a positive integer query param, returning (value, error).\"\"\"\n    raw_value = request.args.get(name)\n\n    if raw_value is None:\n        return default, None\n\n    try:\n        value = int(raw_value)\n    except ValueError:\n        return None, f\"{name} must be a positive integer\"\n\n    if value < 1:\n        return None, f\"{name} must be a positive integer\"\n\n    return value, None\n\n\n@app.route(\"/items\", methods=[\"GET\"])\ndef get_items():\n    \"\"\"Return paginated items.\"\"\"\n    page, error = _get_positive_int_query_param(\"page\", 1)\n    if error:\n        return jsonify({\"error\": error}), 400\n\n    per_page, error = _get_positive_int_query_param(\"per_page\", 20)\n    if error:\n        return jsonify({\"error\": error}), 400\n\n    total = len(items)\n    total_pages = ceil(total / per_page) if total else 0\n\n    start = (page - 1) * per_page\n    end = start + per_page\n\n    # Out-of-range pages naturally return an empty list.\n    paginated_items = items[start:end]\n\n    return jsonify(\n        {\n            \"items\": paginated_items,\n            \"total\": total,\n            \"page\": page,\n            \"per_page\": per_page,\n            \"total_pages\": total_pages,\n        }\n    )\n\n\n@app.route(\"/items/<int:item_id>\", methods=[\"GET\"])\ndef get_item(item_id):\n    \"\"\"Return a single item by ID.\"\"\"\n    item = next((i for i in items if i[\"id\"] == item_id), None)\n    if item is None:\n        return jsonify({\"error\": \"Item not found\"}), 404\n    return jsonify(item)\n\n\n@app.route(\"/items\", methods=[\"POST\"])\ndef create_item():\n    \"\"\"Create a new item.\"\"\"\n    data = request.get_json()\n    if not data or \"name\" not in data:\n        return jsonify({\"error\": \"Name is required\"}), 400\n\n    new_id = max(i[\"id\"] for i in items) + 1 if items else 1\n    new_item = {\n        \"id\": new_id,\n        \"name\": data[\"name\"],\n        \"description\": data.get(\"description\", \"\"),\n    }\n\n    items.append(new_item)\n\n    return jsonify(new_item), 201\n\n\nif __name__ == \"__main__\":\n    app.run(debug=True, port=5001)\n```\n\n**test_app.py**\n```python\n\"\"\"Tests for the items API.\"\"\"\nimport pytest\n\nfrom app import app, items\n\n\n@pytest.fixture(autouse=True)\ndef reset_items():\n    \"\"\"Reset in-memory items before each test.\"\"\"\n    items.clear()\n    items.extend(\n        [\n            {\n                \"id\": i,\n                \"name\": f\"Item {i}\",\n                \"description\": f\"Description for item {i}\",\n            }\n            for i in range(1, 51)\n        ]\n    )\n\n\n@pytest.fixture\ndef client():\n    app.config[\"TESTING\"] = True\n    with app.test_client() as client:\n        yield client\n\n\ndef test_get_items_default_pagination(client):\n    \"\"\"Should return first page with default pagination.\"\"\"\n    resp = client.get(\"/items\")\n\n    assert resp.status_code == 200\n\n    data = resp.get_json()\n\n    assert data[\"total\"] == 50\n    assert data[\"page\"] == 1\n    assert data[\"per_page\"] == 20\n    assert data[\"total_pages\"] == 3\n    assert len(data[\"items\"]) == 20\n    assert data[\"items\"][0][\"id\"] == 1\n    assert data[\"items\"][-1][\"id\"] == 20\n\n\ndef test_get_items_custom_pagination(client):\n    \"\"\"Should return requested page and per_page.\"\"\"\n    resp = client.get(\"/items?page=2&per_page=10\")\n\n    assert resp.status_code == 200\n\n    data = resp.get_json()\n\n    assert data[\"total\"] == 50\n    assert data[\"page\"] == 2\n    assert data[\"per_page\"] == 10\n    assert data[\"total_pages\"] == 5\n    assert len(data[\"items\"]) == 10\n    assert data[\"items\"][0][\"id\"] == 11\n    assert data[\"items\"][-1][\"id\"] == 20\n\n\ndef test_get_items_last_partial_page(client):\n    \"\"\"Should return remaining items on a partial last page.\"\"\"\n    resp = client.get(\"/items?page=3\")\n\n    assert resp.status_code == 200\n\n    data = resp.get_json()\n\n    assert data[\"total\"] == 50\n    assert data[\"page\"] == 3\n    assert data[\"per_page\"] == 20\n    assert data[\"total_pages\"] == 3\n    assert len(data[\"items\"]) == 10\n    assert data[\"items\"][0][\"id\"] == 41\n    assert data[\"items\"][-1][\"id\"] == 50\n\n\ndef test_get_items_out_of_range_page(client):\n    \"\"\"Should return an empty items list for out-of-range pages.\"\"\"\n    resp = client.get(\"/items?page=999&per_page=20\")\n\n    assert resp.status_code == 200\n\n    data = resp.get_json()\n\n    assert data[\"total\"] == 50\n    assert data[\"page\"] == 999\n    assert data[\"per_page\"] == 20\n    assert data[\"total_pages\"] == 3\n    assert data[\"items\"] == []\n\n\n@pytest.mark.parametrize(\n    \"query\",\n    [\n        \"page=0\",\n        \"page=-1\",\n        \"page=abc\",\n        \"per_page=0\",\n        \"per_page=-1\",\n        \"per_page=abc\",\n    ],\n)\ndef test_get_items_invalid_pagination_params(client, query):\n    \"\"\"Should reject invalid pagination params.\"\"\"\n    resp = client.get(f\"/items?{query}\")\n\n    assert resp.status_code == 400\n\n    data = resp.get_json()\n    assert \"error\" in data\n\n\ndef test_get_single_item(client):\n    \"\"\"Should return item by ID.\"\"\"\n    resp = client.get(\"/items/1\")\n\n    assert resp.status_code == 200\n\n    data = resp.get_json()\n\n    assert data[\"id\"] == 1\n    assert data[\"name\"] == \"Item 1\"\n\n\ndef test_get_missing_item(client):\n    \"\"\"Should return 404 for non-existent item.\"\"\"\n    resp = client.get(\"/items/9999\")\n\n    assert resp.status_code == 404\n\n\ndef test_create_item(client):\n    \"\"\"Should create a new item.\"\"\"\n    resp = client.post(\"/items\", json={\"name\": \"New Item\", \"description\": \"Test\"})\n\n    assert resp.status_code == 201\n\n    data = resp.get_json()\n\n    assert data[\"id\"] == 51\n    assert data[\"name\"] == \"New Item\"\n    assert data[\"description\"] == \"Test\"\n\n\ndef test_create_item_no_name(client):\n    \"\"\"Should reject item without name.\"\"\"\n    resp = client.post(\"/items\", json={\"description\": \"No name\"})\n\n    assert resp.status_code == 400\n```",
+    "reasoning": "",
+    "prompt_tokens": 727,
+    "completion_tokens": 3070,
+    "tokens_per_sec": 72.0,
+    "ttft_ms": 0,
+    "wall_time_s": 42.64,
+    "finish_reason": "stop",
+    "features": {
+      "page_param": true,
+      "per_page_param": true,
+      "metadata": true,
+      "out_of_range": true,
+      "tests_updated": true
+    },
+    "feature_score": 5,
+    "feature_max": 5
+  },
+  "task_3.1": {
+    "content": "Root cause: **database connection pool exhaustion caused by long-held connections**.\n\nThe important lines are:\n\n```text\nActive connections: 20/20, Idle: 0, Waiting: 47\nTransaction started at 03:12:01 still open (connection #7)\nQuery returned 2,847,293 rows at 03:12:03\nApplication processing rows in loop (no batch/cursor)\n```\n\nA connection was checked out from the pool, a transaction was opened, a huge query returned ~2.8 million rows, and the application is processing those rows in a Python loop while still holding the database connection and transaction open.\n\nBecause the pool has only 20 connections, if enough requests/jobs behave this way, all connections become occupied. New requests wait for a free connection and eventually time out after 30 seconds.\n\nIncreasing the pool size may reduce symptoms temporarily, but it does not fix the root problem.\n\n---\n\n## Likely root cause\n\nThe application is doing something like:\n\n```python\nconn = pool.get_connection()\ntx = conn.begin()\n\nrows = conn.execute(\"\"\"\n    SELECT *\n    FROM orders\n    JOIN products ON orders.product_id = products.id\n    WHERE orders.status = 'pending'\n\"\"\").fetchall()\n\nfor row in rows:\n    process(row)\n\ntx.commit()\nconn.close()\n```\n\nProblems:\n\n1. `SELECT *` returns too much data.\n2. The query returns millions of rows.\n3. The app processes all rows while holding the DB connection.\n4. The transaction remains open for minutes.\n5. The connection is not returned to the pool until processing finishes.\n6. Other requests starve waiting for connections.\n\n---\n\n## Fix\n\n### 1. Process in batches\n\nDo not load and process millions of rows in one transaction.\n\nExample:\n\n```python\nBATCH_SIZE = 1000\n\nwhile True:\n    with pool.get_connection() as conn:\n        rows = conn.execute(\"\"\"\n            SELECT o.id, o.product_id, p.name\n            FROM orders o\n            JOIN products p ON o.product_id = p.id\n            WHERE o.status = 'pending'\n            ORDER BY o.id\n            LIMIT :limit\n        \"\"\", {\"limit\": BATCH_SIZE}).fetchall()\n\n    if not rows:\n        break\n\n    for row in rows:\n        process(row)\n```\n\nEven better, if processing marks orders complete:\n\n```python\nBATCH_SIZE = 1000\n\nwhile True:\n    with pool.get_connection() as conn:\n        with conn.begin():\n            rows = conn.execute(\"\"\"\n                SELECT o.id, o.product_id, p.name\n                FROM orders o\n                JOIN products p ON o.product_id = p.id\n                WHERE o.status = 'pending'\n                ORDER BY o.id\n                LIMIT :limit\n                FOR UPDATE SKIP LOCKED\n            \"\"\", {\"limit\": BATCH_SIZE}).fetchall()\n\n            if not rows:\n                break\n\n            order_ids = [row.id for row in rows]\n\n            conn.execute(\"\"\"\n                UPDATE orders\n                SET status = 'processing'\n                WHERE id = ANY(:order_ids)\n            \"\"\", {\"order_ids\": order_ids})\n\n    for row in rows:\n        process(row)\n```\n\nThis keeps each transaction short and returns the connection to the pool quickly.\n\n---\n\n### 2. Avoid holding a connection while doing slow application work\n\nIf `process(row)` performs API calls, file I/O, CPU-heavy work, sleeps, or anything slow, do not keep the DB transaction open during that work.\n\nPreferred pattern:\n\n1. Fetch a small batch.\n2. Mark rows as claimed/processing.\n3. Commit and release the connection.\n4. Process rows outside the transaction.\n5. Reconnect only to update final status.\n\n---\n\n### 3. Use explicit column lists, not `SELECT *`\n\nInstead of:\n\n```sql\nSELECT *\n```\n\nuse only the fields needed:\n\n```sql\nSELECT o.id, o.product_id, o.created_at, p.name\n```\n\nThis reduces memory, network traffic, and query time.\n\n---\n\n### 4. Add or verify indexes\n\nThe query filters by:\n\n```sql\norders.status = 'pending'\n```\n\nand joins on:\n\n```sql\norders.product_id = products.id\n```\n\nUseful indexes may include:\n\n```sql\nCREATE INDEX idx_orders_status_id\nON orders(status, id);\n\nCREATE INDEX idx_orders_product_id\nON orders(product_id);\n```\n\nIf `products.id` is a primary key, it is already indexed.\n\nThe exact index should be confirmed with `EXPLAIN ANALYZE`.\n\n---\n\n### 5. Ensure connections are always released\n\nUse context managers or `try/finally`.\n\nBad:\n\n```python\nconn = pool.get_connection()\nrows = conn.execute(query).fetchall()\nfor row in rows:\n    process(row)\nconn.close()\n```\n\nBetter:\n\n```python\nwith pool.get_connection() as conn:\n    rows = conn.execute(query).fetchall()\n```\n\nOr:\n\n```python\nconn = pool.get_connection()\ntry:\n    rows = conn.execute(query).fetchall()\nfinally:\n    conn.close()\n```\n\nAlso ensure transactions are committed or rolled back:\n\n```python\nwith conn.begin():\n    ...\n```\n\n---\n\n### 6. Add safeguards\n\nRecommended production protections:\n\n- Query timeout / statement timeout.\n- Transaction timeout / idle-in-transaction timeout.\n- Maximum rows per job.\n- Metrics for:\n  - pool usage,\n  - waiters,\n  - transaction age,\n  - query duration,\n  - rows returned.\n- Alerts when pool utilization is high.\n- Slow query logging.\n\nFor PostgreSQL, for example:\n\n```sql\nSET statement_timeout = '30s';\nSET idle_in_transaction_session_timeout = '60s';\n```\n\n---\n\n## Summary\n\nThe pool is exhausted because application code is running a huge query and processing millions of rows while keeping database transactions and connections open.\n\nThe fix is to **batch the work, keep transactions short, release connections quickly, avoid `SELECT *`, add proper indexes, and enforce timeouts**. Pool size tuning can help, but it is secondary; the application\u2019s connection usage pattern needs to change.",
+    "reasoning": "",
+    "prompt_tokens": 224,
+    "completion_tokens": 1453,
+    "tokens_per_sec": 59.7,
+    "ttft_ms": 0,
+    "wall_time_s": 24.32,
+    "finish_reason": "stop",
+    "rubric": {
+      "pool_exhaustion": true,
+      "long_transaction": true,
+      "large_query": true,
+      "row_by_row": true,
+      "pool_config_fix": true,
+      "query_fix": true,
+      "transaction_fix": true
+    },
+    "auto_score": 10,
+    "max_score": 10,
+    "manual_score": null
+  },
+  "task_3.2": {
+    "content": "",
+    "reasoning": "",
+    "prompt_tokens": 87,
+    "completion_tokens": 4096,
+    "tokens_per_sec": 48.1,
+    "ttft_ms": 0,
+    "wall_time_s": 85.17,
+    "finish_reason": "length",
+    "rubric": {
+      "crdt_accurate": false,
+      "ot_accurate": false,
+      "recommendation": false,
+      "architecture": false,
+      "edge_cases": false
+    },
+    "auto_score": 0,
+    "max_score": 10,
+    "manual_score": null
+  },
+  "task_3.3": {
+    "content": "Using Bayes\u2019 theorem:\n\n\\[\nP(C \\mid E)=\\frac{P(E \\mid C)P(C)}{P(E)}\n\\]\n\nWhere:\n\n- \\(P(C)=0.25\\), the probability traffic goes to Server C\n- \\(P(E \\mid C)=0.03\\), the error rate of Server C\n- \\(P(E)\\) is the total probability of an error\n\nFirst compute the total probability of an error:\n\n\\[\nP(E)=P(E \\mid A)P(A)+P(E \\mid B)P(B)+P(E \\mid C)P(C)\n\\]\n\n\\[\nP(E)=(0.01)(0.40)+(0.02)(0.35)+(0.03)(0.25)\n\\]\n\n\\[\nP(E)=0.004+0.007+0.0075=0.0185\n\\]\n\nNow apply Bayes\u2019 theorem:\n\n\\[\nP(C \\mid E)=\\frac{(0.03)(0.25)}{0.0185}\n\\]\n\n\\[\nP(C \\mid E)=\\frac{0.0075}{0.0185}\n\\]\n\n\\[\nP(C \\mid E)\\approx 0.4054\n\\]\n\nSo the probability that the error came from Server C is:\n\n\\[\n\\boxed{40.54\\%}\n\\]",
+    "reasoning": "",
+    "prompt_tokens": 90,
+    "completion_tokens": 361,
+    "tokens_per_sec": 60.2,
+    "ttft_ms": 0,
+    "wall_time_s": 6.0,
+    "finish_reason": "stop",
+    "rubric": {
+      "correct_answer": true,
+      "old_wrong_answer": false,
+      "uses_bayes": true,
+      "shows_work": true
+    },
+    "auto_score": 5,
+    "max_score": 5,
+    "manual_score": null
+  },
+  "task_4.1": {
+    "content": "[\n  {\n    \"id\": \"7f4b2c9e-8a31-4d6f-9c12-5e3a0b7d91f4\",\n    \"name\": \"Maya Rodriguez\",\n    \"email\": \"maya.rodriguez@example.com\",\n    \"role\": \"admin\",\n    \"created_at\": \"2024-01-15T09:24:37Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true,\n      \"language\": \"en\"\n    }\n  },\n  {\n    \"id\": \"2c8e5a91-6f73-4b0d-8e6a-1a9d4f3c2b80\",\n    \"name\": \"Ethan Brooks\",\n    \"email\": \"ethan.brooks@example.com\",\n    \"role\": \"user\",\n    \"created_at\": \"2024-03-02T14:11:05Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": false,\n      \"language\": \"en\"\n    }\n  },\n  {\n    \"id\": \"d91a7b6c-3e54-42f8-a0b9-7c2d5e8f4a13\",\n    \"name\": \"Sofia Chen\",\n    \"email\": \"sofia.chen@example.com\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2023-11-28T18:42:19Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true,\n      \"language\": \"zh\"\n    }\n  },\n  {\n    \"id\": \"a3f9c2d7-5b81-4e60-9f34-0d6a8c1b2e75\",\n    \"name\": \"Liam Patel\",\n    \"email\": \"liam.patel@example.com\",\n    \"role\": \"user\",\n    \"created_at\": \"2024-05-19T07:36:52Z\",\n    \"preferences\": {\n      \"theme\": \"light\",\n      \"notifications\": true,\n      \"language\": \"hi\"\n    }\n  },\n  {\n    \"id\": \"e6b1d4a8-9c27-4f5e-b3a0-6d8f2c7e1b94\",\n    \"name\": \"Amelia Johnson\",\n    \"email\": \"amelia.johnson@example.com\",\n    \"role\": \"moderator\",\n    \"created_at\": \"2023-09-07T12:08:44Z\",\n    \"preferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": false,\n      \"language\": \"fr\"\n    }\n  }\n]",
+    "reasoning": "",
+    "prompt_tokens": 90,
+    "completion_tokens": 623,
+    "tokens_per_sec": 58.8,
+    "ttft_ms": 0,
+    "wall_time_s": 10.59,
+    "finish_reason": "stop",
+    "scoring": {
+      "valid_json": true,
+      "five_records": true,
+      "fields_match": true,
+      "enums_valid": true,
+      "no_extra_text": true
+    },
+    "auto_score": 5,
+    "max_score": 5
+  },
+  "task_4.2": {
+    "content": "[\n  {\n    \"tool\": \"read_file\",\n    \"arguments\": {\n      \"path\": \"config.yaml\"\n    }\n  },\n  {\n    \"tool\": \"execute\",\n    \"arguments\": {\n      \"command\": \"ping -c 4 <database.host value from config.yaml>\"\n    }\n  },\n  {\n    \"tool\": \"write_file\",\n    \"arguments\": {\n      \"path\": \"health-check.txt\",\n      \"content\": \"<current timestamp>\\\\nHost: <database.host value from config.yaml>\\\\n\\\\n<ping command output>\"\n    }\n  }\n]",
+    "reasoning": "",
+    "prompt_tokens": 76,
+    "completion_tokens": 643,
+    "tokens_per_sec": 56.8,
+    "ttft_ms": 0,
+    "wall_time_s": 11.33,
+    "finish_reason": "stop",
+    "scoring": {
+      "read_file_call": true,
+      "parses_yaml": true,
+      "ping_call": true,
+      "write_file_call": true,
+      "logical_order": true
+    },
+    "auto_score": 5,
+    "max_score": 5
+  },
+  "task_5.1": {
+    "task_id": "5.1",
+    "runs": [
+      {
+        "tokens_per_sec": 49.7,
+        "ttft_ms": 3658.5,
+        "completion_tokens": 226,
+        "wall_time_s": 4.55
+      },
+      {
+        "tokens_per_sec": 43.3,
+        "ttft_ms": 3461.8,
+        "completion_tokens": 227,
+        "wall_time_s": 5.24
+      },
+      {
+        "tokens_per_sec": 43.6,
+        "ttft_ms": 3312.9,
+        "completion_tokens": 190,
+        "wall_time_s": 4.36
+      }
+    ],
+    "median_tokens_per_sec": 43.6,
+    "median_ttft_ms": 3461.8,
+    "median_completion_tokens": 226
+  },
+  "task_5.2": {
+    "task_id": "5.2",
+    "runs": [
+      {
+        "tokens_per_sec": 82.8,
+        "ttft_ms": 2901.3,
+        "completion_tokens": 743,
+        "wall_time_s": 8.98
+      },
+      {
+        "tokens_per_sec": 84.9,
+        "ttft_ms": 2252.0,
+        "completion_tokens": 881,
+        "wall_time_s": 10.38
+      },
+      {
+        "tokens_per_sec": 68.2,
+        "ttft_ms": 2396.5,
+        "completion_tokens": 635,
+        "wall_time_s": 9.3
+      }
+    ],
+    "median_tokens_per_sec": 82.8,
+    "median_ttft_ms": 2396.5,
+    "median_completion_tokens": 743
+  },
+  "task_5.3": {
+    "task_id": "5.3",
+    "runs": [
+      {
+        "tokens_per_sec": 46.8,
+        "ttft_ms": 80201.8,
+        "completion_tokens": 4096,
+        "wall_time_s": 87.55
+      },
+      {
+        "tokens_per_sec": 45.8,
+        "ttft_ms": 0,
+        "completion_tokens": 4096,
+        "wall_time_s": 89.47
+      },
+      {
+        "tokens_per_sec": 46.5,
+        "ttft_ms": 0,
+        "completion_tokens": 4096,
+        "wall_time_s": 88.05
+      }
+    ],
+    "median_tokens_per_sec": 46.5,
+    "median_ttft_ms": 0,
+    "median_completion_tokens": 4096
+  }
+}
