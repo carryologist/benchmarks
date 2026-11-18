@@ -1,0 +1,29 @@
+[
+  {
+    "case": "c=1, prompt 256",
+    "repeats": 8,
+    "decode_tok_s": 61.5,
+    "decode_min": 58.1,
+    "decode_max": 67.8,
+    "ttft_ms": 300,
+    "aggregate_tok_s": 54.0
+  },
+  {
+    "case": "c=1, prompt 32768",
+    "repeats": 3,
+    "decode_tok_s": 44.7,
+    "decode_min": 42.0,
+    "decode_max": 58.3,
+    "ttft_s": 18.3,
+    "aggregate_tok_s": 6.0
+  },
+  {
+    "case": "c=6, prompt 4096",
+    "repeats": 3,
+    "decode_tok_s": 17.0,
+    "decode_min": 16.4,
+    "decode_max": 17.7,
+    "ttft_s": 8.7,
+    "aggregate_tok_s": 45.6
+  }
+]

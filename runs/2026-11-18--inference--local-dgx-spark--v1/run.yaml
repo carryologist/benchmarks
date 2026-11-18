@@ -1,0 +1,77 @@
+id: 2026-11-18--inference--local-dgx-spark--v1
+title: "RDMA Fabric Recovery on a 2x DGX Spark Cluster (DeepSeek-V4-Flash Vision-Exp DSpark)"
+date: "2026-11-18"
+suite: throughput-matrix (MiaAI 2026-08-14 methodology replica)
+harness: harnesses/local-inference
+environment: local-dgx-spark-2x
+tags:
+  - dgx-spark
+  - rdma
+  - nccl
+  - vllm
+  - dspark
+  - local
+subjects:
+  - key: dsv4flash
+    model: deepseek-v4-flash-vision-exp
+    provider: local-vllm
+    notes: "TP=2 across two DGX Spark nodes, DSpark speculative decoding, nvfp4_ds_mla KV, MAX_MODEL_LEN=500000"
+config:
+  kernel: "6.17.0-1032-nvidia"
+  driver: "580.178.04"
+  nccl_net: "IB"
+  nccl_ib_disable: "0"
+  nccl_ib_hca: "rocep1s0f1"
+  max_model_len: 500000
+  max_num_seqs: 6
+  max_num_batched_tokens: 8192
+  mtp_num_tokens: 5
+  gpu_memory_utilization: 0.80
+cases:
+  - prompt_tokens: 256
+    concurrency: 1
+    repeats: 8
+    decode_tok_s: 61.5
+    decode_min: 58.1
+    decode_max: 67.8
+    ttft_ms: 300
+    aggregate_tok_s: 54.0
+  - prompt_tokens: 32768
+    concurrency: 1
+    repeats: 3
+    decode_tok_s: 44.7
+    decode_min: 42.0
+    decode_max: 58.3
+    ttft_s: 18.3
+    aggregate_tok_s: 6.0
+  - prompt_tokens: 4096
+    concurrency: 6
+    repeats: 3
+    decode_tok_s: 17.0
+    decode_min: 16.4
+    decode_max: 17.7
+    ttft_s: 8.7
+    aggregate_tok_s: 45.6
+comparisons:
+  - against: "2026-11-17 socket mode, 500K context"
+    c1_256_decode: "34.3 -> 61.5 (+79%)"
+    c1_32k_decode: "38.4 -> 44.7 (+16%)"
+    c1_32k_ttft: "32.4s -> 18.3s (-44%)"
+    c6_4k_decode: "9.7 -> 17.0 (+75%)"
+    c6_4k_aggregate: "27.0 -> 45.6 (+69%)"
+  - against: "2026-11-17 baseline, 1M context, socket"
+    c1_256_decode: "32.8 -> 61.5 (+88%)"
+    c6_4k_aggregate: "25.5 -> 45.6 (+79%)"
+fabric:
+  ib_write_bw_mbps: 12995
+  ib_write_bw_gbps: 104
+  tcp_gbps: "16-19"
+  gdr_supported: false
+tool_loop:
+  probe_cases: 15
+  empty_turns: 0
+  dsml_leaks: 0
+  backend_hotfix: "DSPARK_ENABLE_ASSISTANT_FINAL_HOTFIX=1"
+links:
+  report: "reports/2026-11-18-dgx-spark-rdma.md"
+  harness: "harnesses/local-inference"

@@ -6,7 +6,7 @@ Benchmark suites, harnesses, and results from [vibescoder.dev](https://vibescode
 
 ```
 suites/       — reusable benchmark definitions (tasks, fixtures, scoring)
-harnesses/    — reusable runner scripts
+harnesses/    — reusable runner scripts (cloud API, local inference)
 runs/         — dated benchmark executions with results
 reports/      — human-readable summaries linked from blog posts
 ```
@@ -16,6 +16,7 @@ reports/      — human-readable summaries linked from blog posts
 | Date | Run | Blog Post |
 |------|-----|-----------|
 | 2026-06-12 | [Frontier Bakeoff](runs/2026-06-12--coding--frontier-api--v1/) | [Frontier Bakeoff: We Benchmarked Fable 5 Hours Before the Shutdown](https://vibescoder.dev/posts/frontier-bakeoff-we-benchmarked-fable-5-hours-before-the-shutdown) |
+| 2026-11-18 | [DGX Spark RDMA Recovery](runs/2026-11-18--inference--local-dgx-spark--v1/) | [report](reports/2026-11-18-dgx-spark-rdma.md) (blog pending) |
 
 ## Naming Convention
 
